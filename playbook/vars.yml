@@ -1,0 +1,23 @@
+---
+mongodb_root_user: "admin"
+mongodb_root_password: "admin"
+mongodb_pbm_password: "password"
+
+replica_set_name: rs0
+
+mongodb_server_privatekey_path: /etc/mongod/server.key
+mongodb_server_csr_path: /etc/mongod/server.csr
+mongodb_server_cert_path: /etc/mongod/server.crt
+mongodb_server_pem_path: /etc/mongod/server.pem
+
+mongodb_ca_common_name: "MongoDB CA"
+
+mongodb_ca_path: /etc/mongod/ca.pem
+mongodb_ca_privatekey_path: /etc/mongod/ca.key
+mongodb_ca_cert_path: /etc/mongod/ca.crt
+
+mongodb_rs_privatekey_path: /etc/mongod/rs.key
+mongodb_rs_csr_path: /etc/mongod/rs.csr
+mongodb_rs_cert_path: /etc/mongod/rs.crt
+mongodb_rs_pem_path: /etc/mongod/rs.pem
+

@@ -1,0 +1,83 @@
+---
+- name: configure replica set
+  become: true
+  hosts: db
+  
+  vars_files:
+    - vars.yml
+  
+  handlers:
+    - import_tasks: handlers/mongod.yml
+  
+  tasks:
+    - meta: flush_handlers 
+    - name: Initilize replica set on db group (db as primary, backup as secondary)
+      community.mongodb.mongodb_replicaset:
+        replica_set: rs0
+        tls: true
+        ssl_ca_certs: "{{ mongodb_ca_path }}"
+        ssl_certfile: "{{ mongodb_server_pem_path }}"
+        members:
+          - _id: 0
+            host: 192.168.121.80
+            priority: 2
+          - _id: 1
+            host: 192.168.121.81
+            priority: 1
+        validate: false
+      register: replica_set_result
+      ignore_errors: true
+      retries: 5
+      notify: restart mongod
+    - meta: flush_handlers 
+
+    - name: wait for replica set to be initiated
+      community.mongodb.mongodb_status:
+        replica_set: rs0
+        poll: 5
+        interval: 10
+        validate: "minimal"
+        tls: true
+        ssl_ca_certs: "{{ mongodb_ca_path }}"
+        ssl_certfile: "{{ mongodb_server_pem_path }}"
+        auth_mechanism: "MONGODB-X509"
+        strict_compatibility: false
+      register: rs_mongodb_status
+      failed_when: "rs_mongodb_status.replicaset[inventory_hostname + ':27017'] != 'PRIMARY'"
+      retries: 5
+      delay: 5
+
+    - name: Create a mongodb user for server certifcate
+      community.mongodb.mongodb_shell:
+        db: admin
+        # login_user: "{{ mongodb_root_user }}"
+        # login_password: "{{ mongodb_root_password }}"
+        eval: 'db.getSiblingDB("$external").runCommand({createUser: "subject=CN={{ inventory_hostname }},O=MongoDB,C=IN", roles: [{role: "userAdminAnyDatabase", db: "admin"}]})'
+        additional_args:
+          tls: ''
+          tlsCAFile: "{{ mongodb_ca_path }}"
+          tlsCertificateKeyFile: "{{ mongodb_server_pem_path }}"
+
+      ignore_errors: true
+      register: create_user_result
+      run_once: true
+      retries: 5
+      until: "create_user_result.msg != 'MongoServerError: not primary'"
+      tags: create_user_for_server_cert
+
+
+
+    - name: Create a mongodb root user
+      community.mongodb.mongodb_user:
+        database: admin
+        name: "{{ mongodb_root_user }}"
+        password: "{{ mongodb_root_password }}"
+        roles: 
+          - role: root
+            db: admin
+        tls: true
+        tlsCAFile: "{{ mongodb_ca_path }}"
+        tlsCertificateKeyFile: "{{ mongodb_server_pem_path }}"
+        login_database: "$external"
+        auth_mechanism: "MONGODB-X509"
+

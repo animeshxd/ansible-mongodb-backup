@@ -1,0 +1,74 @@
+---
+- hosts: backup
+  become: true
+
+  vars_files:
+    - vars.yml
+  
+  vars:
+    database_tool: "mongodb-database-tools-debian12-x86_64-100.9.4.deb"
+    database_tool_checksum: "sha256:75c34f7e5801f2595c212caf7e9075bc066eda8e219a8a78b88243b11f500760"
+
+    connection_string:  "mongodb://127.0.0.1:27017/?tls=true&tlsCAFile={{ mongodb_ca_path }}&tlsCertificateKeyFile={{ mongodb_server_pem_path }}&authSource=$external&authMechanism=MONGODB-X509"
+    backupDir: "/var/backups/mongodb"  
+
+  pre_tasks:
+    - import_tasks: tasks/cache.yml
+  handlers:
+    - import_tasks: handlers/mongod.yml
+
+  tasks:
+    - name: "Download {{ database_tool }}"
+      get_url:
+        url: "https://fastdl.mongodb.org/tools/db/{{ database_tool }}"
+        dest: "/tmp/{{ database_tool }}"
+        checksum: "{{ database_tool_checksum }}"
+    - name: "Install {{ database_tool }}"
+      apt:
+        deb: "/tmp/{{ database_tool }}"
+        state: present
+        update_cache: yes
+    - name: "Create a directory for backup {{ backupDir }}" 
+      file:
+        path: "{{ backupDir }}"
+        state: directory
+        owner: mongodb
+        group: mongodb
+        mode: 0755
+    - name: "Start cron service"
+      service:
+        name: cron
+        state: started
+        enabled: yes
+    
+    - name: Create a cron job for backup MongoDB
+      cron:
+        name: "Backup MongoDB"
+        job: > 
+          bash -c
+          "/usr/bin/mongodump
+          --ssl
+          --sslCAFile {{ mongodb_ca_path }}
+          --sslPEMKeyFile {{ mongodb_server_pem_path }} 
+          --authenticationDatabase '$external' 
+          --authenticationMechanism MONGODB-X509 
+          --gzip 
+          --archive={{ backupDir }}/mongodb-$(date +\%Y-\%m-\%d-\%H-\%M-\%S).gz >> {{ backupDir }}/backup.log 2>&1"
+        user: mongodb
+        state: present
+        cron_file: "mongodb-backup"
+        special_time: "daily"
+        # minute: "*/1"
+
+
+    - name: "Clean up backup files older than 7 days"
+      cron:
+        name: "Clean up backup files older than 7 days"
+        job: "find {{ backupDir }} -type f -mtime +7 -exec rm -f {} \\;"
+        user: mongodb
+        state: present
+        cron_file: "mongodb-backup-cleanup"
+        special_time: "daily"
+        # minute: "*/1"
+
+

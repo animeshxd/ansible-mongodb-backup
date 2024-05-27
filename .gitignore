@@ -1,0 +1,4 @@
+.vagrant
+playbook/ssl/*
+!playbook/ssl/init.sh
+

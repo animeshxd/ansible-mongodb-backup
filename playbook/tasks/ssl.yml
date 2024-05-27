@@ -1,0 +1,121 @@
+---
+- meta: flush_handlers
+- name: create /etc/mongod directory
+  file:
+    path: /etc/mongod
+    state: directory
+
+- name: copy CA files
+  copy:
+    src: ssl/
+    dest: "/etc/mongod"
+    owner: mongodb
+    group: mongodb
+    mode: 0440
+# - name: copy ca.crt to /etc/mongod
+#   template:
+#     src: ca.crt
+#     dest: "{{ mongodb_ca_cert_path }}"
+#     owner: mongodb
+#     group: mongodb
+#     mode: 0440
+# - name: copy ca.key to /etc/mongod
+#   template:
+#     src: ca.key
+#     dest: "{{ mongodb_ca_privatekey_path }}"
+#     owner: mongodb
+#     group: mongodb
+#     mode: 0440
+
+- name: Generate an OpenSSL private key with a different size (2048 bits)
+  community.crypto.openssl_privatekey:
+    path: "{{ mongodb_server_privatekey_path }}"
+    size: 2048
+    owner: mongodb
+    group: mongodb
+    mode: 0440
+
+- name: Generate an OpenSSL Certificate Signing Request with Subject information
+  community.crypto.openssl_csr:
+    path: "{{ mongodb_server_csr_path }}"
+    privatekey_path: "{{ mongodb_server_privatekey_path }}"
+    common_name: "{{ inventory_hostname }}"
+    subject_alt_name: 'IP:127.0.0.1,DNS:localhost,IP:{{ ansible_default_ipv4.address }},IP:{{ inventory_hostname }}'
+    country_name: IN
+    organization_name: "MongoDB"
+    owner: mongodb
+    group: mongodb
+    mode: 0440
+  
+- name: Generate an OpenSSL certificate signed with your own CA certificate
+  community.crypto.x509_certificate:
+    path: "{{ mongodb_server_cert_path }}"
+    csr_path: "{{ mongodb_server_csr_path }}"
+    ownca_path: "{{ mongodb_ca_path }}"
+    ownca_privatekey_path: "{{ mongodb_ca_privatekey_path }}"
+    provider: ownca
+    owner: mongodb
+    group: mongodb
+    mode: 0440
+  register: cert_result
+    
+- name: Generate server pem from key and certifcate
+  shell:
+    cmd: "cat {{ mongodb_server_privatekey_path }} {{ mongodb_server_cert_path }} > {{ mongodb_server_pem_path }}"
+    # creates: "{{ mongodb_server_pem_path }}"
+  when: cert_result.changed
+
+- name: change pem file permissions
+  file:
+    path: "{{ mongodb_server_pem_path }}"
+    state: file
+    owner: mongodb
+    group: mongodb
+    mode: 0440 # only mongod can read this file
+
+- name: Generate openssl private key for replica set
+  community.crypto.openssl_privatekey:
+    path: "{{ mongodb_rs_privatekey_path }}"
+    size: 2048
+    owner: mongodb
+    group: mongodb
+    mode: 0440
+- name: Generate an OpenSSL Certificate Signing Request with Subject information for replica set
+  community.crypto.openssl_csr:
+    path: "{{ mongodb_rs_csr_path }}"
+    privatekey_path: "{{ mongodb_rs_privatekey_path }}"
+    common_name: "{{ inventory_hostname }}"
+    subject_alt_name: "IP:127.0.0.1,DNS:localhost,{{ groups['all'] | map('regex_replace', '^', 'IP:') | list | join(',') }}"
+    country_name: IN
+    organization_name: "MongoDB"
+    owner: mongodb
+    group: mongodb
+    mode: 0440
+- name: Generate an OpenSSL certificate signed with your own CA certificate for replica set
+  community.crypto.x509_certificate:
+    path: "{{ mongodb_rs_cert_path }}"
+    csr_path: "{{ mongodb_rs_csr_path }}"
+    ownca_path: "{{ mongodb_ca_path }}"
+    ownca_privatekey_path: "{{ mongodb_ca_privatekey_path }}"
+    provider: ownca
+    owner: mongodb
+    group: mongodb
+    mode: 0440
+  register: rs_cert_result
+- name: Generate rs pem from key and certifcate
+  shell:
+    cmd: "cat {{ mongodb_rs_privatekey_path }} {{ mongodb_rs_cert_path }} > {{ mongodb_rs_pem_path }}"
+    # creates: "{{ mongodb_rs_pem_path }}"
+  when: rs_cert_result.changed
+- name: change rs pem file permissions
+  file:
+    path: "{{ mongodb_rs_pem_path }}"
+    state: file
+    owner: mongodb
+    group: mongodb
+    mode: 0440 # only mongod can read this file
+
+- name: Start mongod service
+  service:
+    name: mongod
+    state: restarted

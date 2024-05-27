@@ -1,0 +1,25 @@
+---
+- name: Install and configure MongoDB with SSL
+  hosts: all
+  become: true
+  vars_files:
+    - vars.yml
+  
+  pre_tasks:
+    - import_tasks: tasks/cache.yml
+  handlers:
+    - import_tasks: handlers/mongod.yml
+
+  tasks:
+    - name: Install python3-pymongo, python3-dnspython, python3-cryptography
+      apt:
+        pkg:
+          - python3-pymongo
+          - python3-dnspython
+          - python3-cryptography
+        state: present
+    - import_tasks: tasks/mongodb.yml
+    - import_tasks: tasks/ssl.yml
+
+- import_playbook: rs.yml 
+- import_playbook: backup.yml

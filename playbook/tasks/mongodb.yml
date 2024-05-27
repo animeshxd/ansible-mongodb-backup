@@ -1,0 +1,33 @@
+---
+- name: "Download mongodb-org-server_7.0.9_amd64.deb"
+  get_url:
+    url: "https://repo.mongodb.org/apt/debian/dists/bookworm/mongodb-org/7.0/main/binary-amd64/mongodb-org-server_7.0.9_amd64.deb"
+    dest: "/tmp/mongodb-org-server_7.0.9_amd64.deb"
+    checksum: "sha256:34931609c0d646e3f7152a7259c62714b18f787f2e4c947b5ae2deadaaa786f3"
+
+- name: "Install mongodb"
+  apt:
+    deb: "/tmp/mongodb-org-server_7.0.9_amd64.deb"
+    state: present
+
+- name: Configure mongodb.conf 
+  template:
+    src: mongodb.conf.j2
+    dest: /etc/mongod.conf
+
+- name: Enable and start mongodb server
+  service: 
+    name: mongod
+    enabled: true
+
+- name: "Download mongodb-mongosh_2.2.6_amd64.deb"
+  get_url:
+    url: "https://downloads.mongodb.com/compass/mongodb-mongosh_2.2.6_amd64.deb"
+    dest: "/tmp/mongodb-mongosh_2.2.6_amd64.deb"
+    checksum: "sha256:d67be950d450dba7ea3c2447759cd088caa9bd5e8615f0ee731e0156864d032f"
+
+- name: "Install mongosh"
+  apt:
+    deb: "/tmp/mongodb-mongosh_2.2.6_amd64.deb"
+    state: present
+
